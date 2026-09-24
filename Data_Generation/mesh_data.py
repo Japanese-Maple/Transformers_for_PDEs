@@ -31,8 +31,18 @@ p_coarse, e_coarse, t_coarse = Plot_Initial_Refined_meshes(
 )
 p_fine, e_fine, t_fine = refine(p_coarse, e_coarse, t_coarse)
 
+boundary_edges = e_fine[e_fine[:, 2] > 0]
+boundary_node_ids = np.unique(boundary_edges[:, 0:2]).astype(int)
+
+if boundary_node_ids.min() >= 1:
+    boundary_node_ids -= 1
+Nv = p_fine.shape[0]
+b_nodes = np.zeros((Nv, 1), dtype=np.float32)
+b_nodes[boundary_node_ids] = 1.0
+
 data_path = os.path.join(project_root, 'Data_Generation/Data')
 save_mesh_data(
     p_fine, e_fine, t_fine,
     p_coarse, e_coarse, t_coarse,
+    b_nodes,
     path=data_path, name='ex_dev')

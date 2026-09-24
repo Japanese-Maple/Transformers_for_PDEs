@@ -57,9 +57,10 @@ def normalize_feature_matrix(X_raw: torch.Tensor, k_params: int, mu_range:list) 
 #____________________________________________________________________________________________________________________________
 
 def save_mesh_data(p_fine, e_fine, t_fine, 
-                         p_coarse, e_coarse, t_coarse,
-                         path:str,
-                         name:str='ex_dev'):
+                   p_coarse, e_coarse, t_coarse,
+                   b_nodes,
+                   path:str,
+                   name:str='ex_dev'):
     """Saves the mesh data into a single file in compressed ```.npz``` format."""
     
     np.savez_compressed(f'{path}/{name}.npz',
@@ -68,7 +69,8 @@ def save_mesh_data(p_fine, e_fine, t_fine,
                         t_fine=t_fine,
                         p_coarse=p_coarse,                        
                         e_coarse=e_coarse,
-                        t_coarse=t_coarse,)
+                        t_coarse=t_coarse,
+                        b_nodes=b_nodes)
     
     print(f"Mesh '{name}' data saved.")  
 
@@ -85,4 +87,6 @@ def load_mesh_data(file_path:str='Data/ex_dev.npz'):
     e_coarse = data['e_coarse']
     t_coarse = data['t_coarse']
 
-    return p_fine, e_fine, t_fine, p_coarse, e_coarse, t_coarse
+    b_nodes  = data['b_nodes']
+
+    return p_fine, e_fine, t_fine, p_coarse, e_coarse, t_coarse, b_nodes

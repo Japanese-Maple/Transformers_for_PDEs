@@ -9,19 +9,29 @@ for path in (project_root, parent_root):
         sys.path.append(path)
 
 import numpy as np
-import torch
-from scipy.stats import qmc
-
 from matplotlib.path import Path
 
-from data_utils import load_mesh_data
+from data_utils import (
+    load_mesh_data,
+    sample_mu_values,
+    sample_mu_parameter_locations,
+    basis_generator,
+    save_parameters_data
+)
 
 #____________________________________________________________________________________________________________________________
+# MAIN CONTROLS
 
-N_samples = 1000
+num_samples      = 700
+k_params         = 9
+minimum_distance = 0.5
+mu_range         = [0.1, 100.0]
+
+#____________________________________________________________________________________________________________________________
+# LOADING MESH
 
 mesh_data_path = os.path.join(project_root, 'Data_Generation/Data', 'ex_dev.npz')
-p_fine, e_fine, t_fine, p_coarse, e_coarse, t_coarse = load_mesh_data(mesh_data_path)
+p_fine, e_fine, t_fine, p_coarse, e_coarse, t_coarse, b_nodes = load_mesh_data(mesh_data_path)
 
 main_region = np.array([
     [ 0.95,  1.0],
@@ -55,94 +65,37 @@ poly_path = Path(main_region)
 inside_mask = poly_path.contains_points(p_fine[:, :2])
 polygon_indices = np.where(inside_mask)[0]
 
-def generate_separated_knob_samples(p_coords, valid_indices, num_samples, M=9, min_dist=0.6):
-    """
-    Generates unique samples of mu parameter locations, ensuring they are spatially separated.
-    
-    Parameters:
-        p_coords      : [N_v, 2] array of spatial coordinates.
-        valid_indices : 1D array of node indices that fall inside the polygon.
-        num_samples   : Total number of unique dataset configurations to generate.
-        M             : Number of knobs per sample.
-        min_dist      : Minimum Euclidean distance enforced between any two knobs.
-    """
-    rng = np.random.default_rng()
-    valid_coords = p_coords[valid_indices]
-    N_valid = len(valid_indices)
-    
-    samples = []
-    seen_configurations = set()
-    
-    while len(samples) < num_samples:
+#____________________________________________________________________________________________________________________________
+# GENERATING PARAMETERS
 
-        picked_local_idx = []
-        candidates = rng.permutation(N_valid)
-
-        for cand in candidates:
-            if not picked_local_idx:
-                picked_local_idx.append(cand)
-                continue
-
-            dists = np.linalg.norm(valid_coords[picked_local_idx] - valid_coords[cand], axis=1)
-            
-            if np.all(dists >= min_dist):
-                picked_local_idx.append(cand)
-
-            if len(picked_local_idx) == M:
-                break
-                
-        if len(picked_local_idx) == M:
-            global_idx = valid_indices[picked_local_idx]
-            signature = tuple(sorted(global_idx))
-            
-            if signature not in seen_configurations:
-                seen_configurations.add(signature)
-                samples.append(global_idx)
-
-    return np.array(samples)
-
-num_dataset_samples = 700 
-knob_indices_batch = generate_separated_knob_samples(
+mu_loc_indices = sample_mu_parameter_locations(
     p_coords=p_fine[:, :2],
     valid_indices=polygon_indices,
-    num_samples=num_dataset_samples,
-    M=9,
-    min_dist=0.6 
+    num_samples=num_samples,
+    k_params=k_params,
+    min_dist=minimum_distance
+) # [700, 9]
+
+mu_locs = p_fine[mu_loc_indices, :2]  # [700, 9, 2]
+
+mu_params = sample_mu_values(
+    k_params=k_params, 
+    mu_range=mu_range, 
+    num_samples=num_samples
+)  # [700, 9]
+
+bases = basis_generator(p_fine[:, :2], mu_locs, power=2.0, eps=1e-8)
+
+#____________________________________________________________________________________________________________________________
+# SAVING PARAMETERS
+
+data_dir = os.path.join(project_root, 'Data_Generation/Data')
+os.makedirs(data_dir, exist_ok=True)
+
+save_parameters_data(
+    mu_values=mu_params,   # [700, 9]
+    mu_loc=mu_locs,        # [700, 9, 2]
+    bases=bases,           # [700, 5899, 9]
+    path=data_dir,
+    name='params'
 )
-
-def save_parameters_data(path:str,
-                            name:str='params'):
-    """Saves the mu values, mu parameter locations and the basis functions into a single file in compressed ```.npz``` format."""
-    
-    np.savez_compressed(f'{path}/{name}.npz',
-                        p_fine=p_fine,                        
-                        e_fine=e_fine,
-                        t_fine=t_fine,
-                        p_coarse=p_coarse,                        
-                        e_coarse=e_coarse,
-                        t_coarse=t_coarse,)
-    
-    print(f"Mesh '{name}' data saved.")  
-
-def load_parameters_data(file_path:str='Data/params.npz'):
-    """Saves the mu values, mu parameter locations and the basis functions into a single file in compressed ```.npz``` format."""
-
-    data = np.load(file_path)
-
-    p_fine = data['p_fine']    
-    e_fine = data['e_fine']
-    t_fine = data['t_fine']
-
-    p_coarse = data['p_coarse']
-    e_coarse = data['e_coarse']
-    t_coarse = data['t_coarse']
-
-    return p_fine, e_fine, t_fine, p_coarse, e_coarse, t_coarse
-
-sampler = qmc.LatinHypercube(d=9)
-sample = sampler.random(n=1)
-nu_parameters = qmc.scale(sample, [0.1]*9, [100]*9)
-
-mu = np.random.uniform(low=0.1, high=100, size=9)
-
-print(mu)

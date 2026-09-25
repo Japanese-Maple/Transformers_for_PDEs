@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+Data_Generation/Data/params.npz
+Outputs/
